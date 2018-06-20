@@ -28,6 +28,9 @@
   <packaging>jar</packaging>
   <name>Quiver JMS Driver</name>
   <description>The JMS Driver implementation for Quiver</description>
+  <properties>
+    <jna.version>4.5.0</jna.version>
+  </properties>
 
   <dependencies>
     <dependency>
@@ -40,6 +43,50 @@
       <version>1.0</version>
       <scope>compile</scope>
     </dependency>
+    <dependency>
+      <groupId>org.agrona</groupId>
+      <artifactId>Agrona</artifactId>
+      <version>0.9.1</version>
+    </dependency>
+    <dependency> <!-- JNA dependency -->
+      <groupId>net.java.dev.jna</groupId>
+      <artifactId>jna</artifactId>
+      <version>${jna.version}</version>
+    </dependency>
+    <dependency> <!-- JNA platform dependency -->
+      <groupId>net.java.dev.jna</groupId>
+      <artifactId>jna-platform</artifactId>
+      <version>${jna.version}</version>
+    </dependency>
+
   </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.1.0</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <minimizeJar>true</minimizeJar>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <artifactSet>
+                <includes>
+                  <include>net.java.dev.jna:jna</include>
+                  <include>net.java.dev.jna:jna-platform</include>
+                </includes>
+              </artifactSet>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 
 </project>

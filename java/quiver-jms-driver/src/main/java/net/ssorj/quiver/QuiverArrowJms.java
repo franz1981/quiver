@@ -18,12 +18,16 @@
  */
 package net.ssorj.quiver;
 
+import net.ssorj.quiver.duration.EpochClock;
+import net.ssorj.quiver.duration.EpochClocks;
+
 import javax.jms.*;
 import javax.naming.Context;
 import javax.naming.InitialContext;
 import java.io.PrintWriter;
 import java.util.Arrays;
 import java.util.Hashtable;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.LockSupport;
 
@@ -83,7 +87,7 @@ class Client {
     protected final int transactionSize;
 
     protected final boolean durable;
-
+    private final boolean micros;
     protected int sent;
     protected int received;
     private final long nanoPeriod;
@@ -96,7 +100,9 @@ class Client {
         this.messages = messages;
         this.bodySize = bodySize;
         this.transactionSize = transactionSize;
-        this.durable = Arrays.asList(flags).contains("durable");
+        final List<String> flagsList = Arrays.asList(flags);
+        this.durable = flagsList.contains("durable");
+        this.micros = flagsList.contains("micros");
         this.nanoPeriod = target > 0 ? TimeUnit.SECONDS.toNanos(1) / target : 0;
         this.sent = 0;
         this.received = 0;
@@ -115,10 +121,26 @@ class Client {
                 session = conn.createSession(false, Session.AUTO_ACKNOWLEDGE);
             }
 
+            final EpochClock epochClock;
+            final TimeUnit formatTimeUnit;
+
+            if (micros){
+                if (EpochClocks.supportMicroClocks()) {
+                    epochClock = EpochClocks.exclusiveMicro();
+                    formatTimeUnit = epochClock.timeUnit();
+                } else {
+                    epochClock = EpochClocks.vanillaMillis();
+                    formatTimeUnit = TimeUnit.MICROSECONDS;
+                }
+            } else {
+                epochClock = EpochClocks.vanillaMillis();
+                formatTimeUnit = epochClock.timeUnit();
+            }
+
             if (operation.equals("send")) {
-                sendMessages(session);
+                sendMessages(session, epochClock, formatTimeUnit);
             } else if (operation.equals("receive")) {
-                receiveMessages(session);
+                receiveMessages(session, epochClock, formatTimeUnit);
             } else {
                 throw new java.lang.IllegalStateException();
             }
@@ -128,6 +150,7 @@ class Client {
             }
 
             conn.close();
+            epochClock.close();
         } catch (JMSException e) {
             throw new RuntimeException(e);
         }
@@ -149,7 +172,7 @@ class Client {
         return nextTime + nanoPeriod;
     }
 
-    void sendMessages(Session session) throws JMSException {
+    void sendMessages(Session session, EpochClock epochClock, TimeUnit formatTimeUnit) throws JMSException {
         PrintWriter out = getOutputWriter();
         MessageProducer producer = session.createProducer(queue);
 
@@ -173,7 +196,7 @@ class Client {
             if (nanoPeriod > 0) {
                 nextTime = waitUntilNextTime(nextTime, nanoPeriod);
             }
-            final long stime = System.currentTimeMillis();
+            final long stime = formatTimeUnit.convert(epochClock.time(), epochClock.timeUnit());
             message.setLongProperty("SendTime", stime);
             producer.send(message);
 
@@ -189,7 +212,7 @@ class Client {
         out.flush();
     }
 
-    void receiveMessages(Session session) throws JMSException {
+    void receiveMessages(Session session, EpochClock epochClock, TimeUnit formatTimeUnit) throws JMSException {
         PrintWriter out = getOutputWriter();
         MessageConsumer consumer = session.createConsumer(queue);
 
@@ -199,10 +222,9 @@ class Client {
             if (message == null) {
                 throw new RuntimeException("Null receive");
             }
-
+            long rtime = formatTimeUnit.convert(epochClock.time(), epochClock.timeUnit());
             String id = message.getJMSMessageID();
             long stime = message.getLongProperty("SendTime");
-            long rtime = System.currentTimeMillis();
 
             out.printf("%s,%d,%d\n", id, stime, rtime);
 
