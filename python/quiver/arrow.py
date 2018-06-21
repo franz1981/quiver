@@ -158,6 +158,8 @@ class QuiverArrowCommand(Command):
 
         if self.durable:
             flags.append("durable")
+        if self.micros:
+            flags.append("micros")
 
         self.flags = ",".join(flags)
 
@@ -226,8 +228,11 @@ class QuiverArrowCommand(Command):
 
     def monitor_subprocess(self, proc):
         snap = _StatusSnapshot(self, None)
-        snap.timestamp = now()
-
+        snap.micros = self.micros
+        if self.micros:
+            snap.timestamp = now() * 1000
+        else:
+            snap.timestamp = now()
         self.start_time = snap.timestamp
         self.timeout_checkpoint = snap
 
@@ -242,6 +247,7 @@ class QuiverArrowCommand(Command):
 
                     snap.previous = None
                     snap = _StatusSnapshot(self, snap)
+                    snap.micros = self.micros
                     snap.capture(fin, proc)
 
                     fsnaps.write(snap.marshal())
@@ -279,17 +285,20 @@ class QuiverArrowCommand(Command):
 
         if self.message_count == 0:
             return
-
+        if self.micros:
+            time_unit_div = 1000000
+        else:
+            time_unit_div = 1000
         if self.operation == "send":
             self.first_send_time = transfers[0][1]
             self.last_send_time = transfers[-1][1]
 
-            duration = (self.last_send_time - self.first_send_time) / 1000
+            duration = (self.last_send_time - self.first_send_time) / time_unit_div
         elif self.operation == "receive":
             self.first_receive_time = transfers[0][2]
             self.last_receive_time = transfers[-1][2]
 
-            duration = (self.last_receive_time - self.first_receive_time) / 1000
+            duration = (self.last_receive_time - self.first_receive_time) / time_unit_div
 
             self.compute_latencies(transfers)
         else:
@@ -365,7 +374,10 @@ class _StatusSnapshot(object):
         self.rss = 0
 
     def capture(self, transfers_file, proc):
-        self.timestamp = now()
+        if self.micros:
+            self.timestamp = now() * 1000
+        else:
+            self.timestamp = now()
         self.period = self.timestamp - self.command.start_time
 
         if self.previous is not None:

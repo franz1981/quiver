@@ -124,6 +124,8 @@ class QuiverPairCommand(Command):
 
         if self.durable:
             args += ["--durable"]
+        if self.micros:
+            args += ["--micros"]
 
         if self.quiet:
             args += ["--quiet"]
@@ -137,7 +139,10 @@ class QuiverPairCommand(Command):
         if self.peer_to_peer:
             receiver_args += ["--server", "--passive"]
 
-        self.start_time = now()
+        if self.micros:
+            self.start_time = now() * 1000;
+        else:
+            self.start_time = now();
 
         receiver = _plano.start_process(receiver_args)
 
@@ -201,30 +206,37 @@ class QuiverPairCommand(Command):
 
                 ssnap, rsnap = None, None
                 i += 1
-
     column_groups = "{:-^53}  {:-^53}  {:-^8}"
     columns = "{:>8}  {:>13}  {:>10}  {:>7}  {:>7}  " \
               "{:>8}  {:>13}  {:>10}  {:>7}  {:>7}  " \
               "{:>8}"
     heading_row_1 = column_groups.format(" Sender ", " Receiver ", "")
-    heading_row_2 = columns.format \
-        ("Time [s]", "Count [m]", "Rate [m/s]", "CPU [%]", "RSS [M]",
-         "Time [s]", "Count [m]", "Rate [m/s]", "CPU [%]", "RSS [M]",
-         "Lat [ms]")
     heading_row_3 = column_groups.format("", "", "")
 
     def print_status_headings(self):
+        if self.micros:
+            time_unit = "us"
+        else:
+            time_unit = "ms"
+        heading_row_2 = self.columns.format \
+            ("Time [s]", "Count [m]", "Rate [m/s]", "CPU [%]", "RSS [M]",
+             "Time [s]", "Count [m]", "Rate [m/s]", "CPU [%]", "RSS [M]",
+             "Lat [" + time_unit + "]")
         print(self.heading_row_1)
-        print(self.heading_row_2)
+        print(heading_row_2)
         print(self.heading_row_3)
 
     def print_status_row(self, ssnap, rsnap):
+        if self.micros:
+            time_unit_div = 1000000
+        else:
+            time_unit_div = 1000
         if ssnap is None:
             stime, scount, srate, scpu, srss = "-", "-", "-", "-", "-"
         else:
-            stime = (ssnap.timestamp - self.start_time) / 1000
-            srate = ssnap.period_count / (ssnap.period / 1000)
-            scpu = (ssnap.period_cpu_time / ssnap.period) * 100
+            stime = (ssnap.timestamp - self.start_time) / time_unit_div
+            srate = ssnap.period_count / (ssnap.period / time_unit_div)
+            scpu = (ssnap.period_cpu_time / ((ssnap.period / time_unit_div) * 1000)) * 100
             srss = ssnap.rss / (1000 * 1024)
 
             stime = "{:,.1f}".format(stime)
@@ -237,9 +249,9 @@ class QuiverPairCommand(Command):
             rtime, rcount, rrate, rcpu, rrss = "-", "-", "-", "-", "-"
             latency = "-"
         else:
-            rtime = (rsnap.timestamp - self.start_time) / 1000
-            rrate = rsnap.period_count / (rsnap.period / 1000)
-            rcpu = (rsnap.period_cpu_time / rsnap.period) * 100
+            rtime = (rsnap.timestamp - self.start_time) / time_unit_div
+            rrate = rsnap.period_count / (rsnap.period / time_unit_div)
+            rcpu = (rsnap.period_cpu_time / ((rsnap.period / time_unit_div) * 1000)) * 100
             rrss = rsnap.rss / (1000 * 1024)
 
             rtime = "{:,.1f}".format(rtime)
@@ -256,6 +268,12 @@ class QuiverPairCommand(Command):
         print(row)
 
     def print_summary(self):
+        if self.micros:
+            time_unit = "us"
+            time_unit_div = 1000000
+        else:
+            time_unit = "ms"
+            time_unit_div = 1000
         with open(_join(self.output_dir, "sender-summary.json")) as f:
             sender = _json.load(f)
 
@@ -275,7 +293,7 @@ class QuiverPairCommand(Command):
 
         start_time = sender["results"]["first_send_time"]
         end_time = receiver["results"]["last_receive_time"]
-        duration = (end_time - start_time) / 1000
+        duration = (end_time - start_time) / time_unit_div
         rate = None
 
         if duration > 0:
@@ -293,23 +311,23 @@ class QuiverPairCommand(Command):
         print("Latency:")
 
         v = receiver["results"]["latency_quartiles"][0]
-        _print_numeric_field("    0%", v, "ms", "{:,.0f}")
+        _print_numeric_field("    0%", v, time_unit, "{:,.0f}")
         v = receiver["results"]["latency_quartiles"][1]
-        _print_numeric_field("   25%", v, "ms", "{:,.0f}")
+        _print_numeric_field("   25%", v, time_unit, "{:,.0f}")
         v = receiver["results"]["latency_quartiles"][2]
-        _print_numeric_field("   50%", v, "ms", "{:,.0f}")
+        _print_numeric_field("   50%", v, time_unit, "{:,.0f}")
         v = receiver["results"]["latency_nines"][0]
-        _print_numeric_field("   90%", v, "ms", "{:,.0f}")
+        _print_numeric_field("   90%", v, time_unit, "{:,.0f}")
         v = receiver["results"]["latency_nines"][1]
-        _print_numeric_field("   99%", v, "ms", "{:,.0f}")
+        _print_numeric_field("   99%", v, time_unit, "{:,.0f}")
         v = receiver["results"]["latency_nines"][2]
-        _print_numeric_field("   99.9%", v, "ms", "{:,.0f}")
+        _print_numeric_field("   99.9%", v, time_unit, "{:,.0f}")
         v = receiver["results"]["latency_nines"][3]
-        _print_numeric_field("   99.99%", v, "ms", "{:,.0f}")
+        _print_numeric_field("   99.99%", v, time_unit, "{:,.0f}")
         v = receiver["results"]["latency_nines"][4]
-        _print_numeric_field("   99.999%", v, "ms", "{:,.0f}")
+        _print_numeric_field("   99.999%", v, time_unit, "{:,.0f}")
         v = receiver["results"]["latency_quartiles"][4]
-        _print_numeric_field("  100%", v, "ms", "{:,.0f}")
+        _print_numeric_field("  100%", v, time_unit, "{:,.0f}")
 
         print("-" * 80)
 

@@ -185,6 +185,8 @@ class Command(object):
                                  default="0")
         self.parser.add_argument("--durable", action="store_true",
                                  help="Require persistent store-and-forward transfers")
+        self.parser.add_argument("--micros", action="store_true",
+                                 help="Require us timestamp precision")
         self.parser.add_argument("--timeout", metavar="SECONDS",
                                  help="Fail after SECONDS without transfers",
                                  default="10")
@@ -207,6 +209,7 @@ class Command(object):
         self.transaction_size = self.parse_int_with_unit(self.args.transaction_size)
         self.target = self.parse_int_with_unit(self.args.target)
         self.durable = self.args.durable
+        self.micros = self.args.micros
         self.timeout = self.parse_int_with_unit(self.args.timeout)
 
     def init_common_tool_attributes(self):
